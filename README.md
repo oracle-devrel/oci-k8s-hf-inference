@@ -53,6 +53,8 @@ TGI supports loading models from HuggingFace model hub or locally. To retrieve a
 
 ## 3. Deploying the LLM container on OKE
 
+![deploying LLM container on OKE](./img/gpu_specs.avif)
+
 0. (optional) Take one of the pretrained LLMs from HuggingFace model hub, such as Meta Llama2 13B, and fine-tune it with a targeted dataset on an [OCI NVIDIA GPU Compute instance](https://www.oracle.com/cloud/compute/gpu/#choice?source=:so:ch:or:awr::::).
 
 1. Save the customized LLM locally and upload it to OCI Object Storage as a model repository.
