@@ -14,17 +14,8 @@ Check out the demo [here](TODO LINK)
 
 ### Prerequisites
 
-- Oracle Cloud Infrastructure (OCI) Account
-- [Oracle Cloud Infrastructure (OCI) Generative AI Service SDK - Oracle Cloud Infrastructure Python SDK](https://pypi.org/project/oci/)
-- [Python 3.10](https://www.python.org/downloads/release/python-3100/)
-- [Conda](https://conda.io/projects/conda/en/latest/user-guide/install/index.html)
-- [OCI SDK](https://docs.oracle.com/en-us/iaas/Content/API/Concepts/sdkconfig.htm)
-
-Follow these links below to generate a config file and a key pair in your ~/.oci directory:
-
-[SDK Config](https://docs.oracle.com/en-us/iaas/Content/API/Concepts/sdkconfig.htm)
-[API Signing Key](https://docs.oracle.com/en-us/iaas/Content/API/Concepts/apisigningkey.htm)
-[SDK CLI Installation](https://docs.oracle.com/en-us/iaas/Content/API/SDKDocs/cliinstall.htm#configfile)
+- An OCI tenancy with available credits to spend, and access to A10 GPU(s).
+- A registered and verified HuggingFace account with a valid Access Token
 
 ### Docs
 
