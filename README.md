@@ -21,7 +21,7 @@ Check out the demo [here](TODO LINK)
 
 For more information, see the following resources:
 
-- [HuggingFace text generation inference](http://https//github.com/huggingface/text-generation-inference)
+- [HuggingFace text generation inference](http://https://github.com/huggingface/text-generation-inference)
 - [NVIDIA device plugin for Kubernetes](https://github.com/NVIDIA/k8s-device-plugin#deployment-via-helm)
 - [HuggingFace model hub](https://huggingface.co/models)
 - [OCI Container Engine for Kubernetes (OKE)](https://www.oracle.com/cloud/cloud-native/container-engine-kubernetes/)
