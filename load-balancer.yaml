@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: tgi-service
+  namespace: default  # Change this if your application is in a different namespace
+  labels:
+    app: tgi-app
+spec:
+  type: LoadBalancer
+  selector:
+    app: tgi-app  # This should match the labels of your deployment or pods
+  ports:
+    - protocol: TCP
+      port: 80  # External port
+      targetPort: 8080  # Port on which your application is running inside the pods
