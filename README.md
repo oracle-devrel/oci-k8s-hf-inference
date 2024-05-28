@@ -69,47 +69,6 @@ For more information, see the following resources:
 - [Kubernetes GPU scheduling](https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/)
 - [NVIDIA GPU instances on OCI](https://www.oracle.com/cloud/compute/gpu/)
 
-## 1. Environment Setup
-
-We need to set up NVIDIA CUDA and NVCC (Nvidia CUDA Compiler) to run parallel code on GPUs. For that, let's run the following commands.
-
-1. Configure the repository:
-
-    ```bash
-    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey |sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
-    && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list \
-    && sudo apt-get update
-    ```
-
-2. Install the NVIDIA Container Toolkit packages:
-
-    ```bash
-    sudo apt-get install -y nvidia-container-toolkit
-    ```
-
-3. Configure the container runtime by using the nvidia-ctk command:
-
-    ```bash
-    sudo nvidia-ctk runtime configure --runtime=docker
-    ```
-
-4. Restart the Docker daemon:
-
-    ```bash
-    sudo systemctl restart docker
-    ```
-
-5. Check that `CUDA` and `nvcc` are installed by running the following commands:
-
-    ```bash
-    nvcc -V
-    nvidia-smi
-    ```
-
-> It's recommended to install NVIDIA drivers with  `CUDA 12.2` or higher.
-
-For running the Docker container on a machine with no GPUs or CUDA support, it is enough to remove the `--gpus all` flag and add `--disable-custom-kernels`, please note CPU is not the intended platform for this project, so performance might be subpar.
-
 ## 1. Create & Access OKE Cluster
 
 To create an OKE Cluster, we can perform this step through the OCI Console:
@@ -172,7 +131,49 @@ curl 127.0.0.1:8080/generate_stream \
 
 We've also pulled a Python script [here](./scripts/python_inference.py) if you'd rather make the requests programatically using Python.
 
-## 2. Model loading
+## 2. Environment Setup
+
+We need to set up NVIDIA CUDA and NVCC (Nvidia CUDA Compiler) to run parallel code on GPUs. For that, let's run the following commands.
+
+1. Configure the repository:
+
+    ```bash
+    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey |sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
+    && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list \
+    && sudo apt-get update
+    ```
+
+2. Install the NVIDIA Container Toolkit packages:
+
+    ```bash
+    sudo apt-get install -y nvidia-container-toolkit
+    ```
+
+3. Configure the container runtime by using the nvidia-ctk command:
+
+    ```bash
+    sudo nvidia-ctk runtime configure --runtime=docker
+    ```
+
+4. Restart the Docker daemon:
+
+    ```bash
+    sudo systemctl restart docker
+    ```
+
+5. Check that `CUDA` and `nvcc` are installed by running the following commands:
+
+    ```bash
+    nvcc -V
+    nvidia-smi
+    ```
+
+> It's recommended to install NVIDIA drivers with  `CUDA 12.2` or higher.
+
+For running the Docker container on a machine with no GPUs or CUDA support, it is enough to remove the `--gpus all` flag and add `--disable-custom-kernels`, please note CPU is not the intended platform for this project, so performance might be subpar.
+
+
+## 3. Model loading
 
 TGI supports loading models from HuggingFace model hub or locally. To retrieve a custom LLM from the OCI Object Storage service, we created a Python script using the OCI Python software developer SDK, packaged it as a container, and stored the Docker image on the OCI Container Registry. This `model-downloader` container runs before the initialization of TGI containers. It retrieves the model files from Object Storage and stores them on the `emptyDir` volumes, enabling sharing with TGI containers within the same pod.
 
