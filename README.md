@@ -1,4 +1,4 @@
-# Serving LLMs using HuggingFace and Kubernetes on OCI Container Engzine for Kubernetes (OKE)
+# Deploying LLMs using HuggingFace and Kubernetes on OCI Container Engine for Kubernetes (OKE)
 
 [![License: UPL](https://img.shields.io/badge/license-UPL-green)](https://img.shields.io/badge/license-UPL-green)<!--[![Quality gate](https://sonarcloud.io/api/project_badges/quality_gate?project=oracle-devrel_oci-k8s-hf-inference)](https://sonarcloud.io/dashboard?id=oracle-devrel_oci-k8s-hf-inference)-->
 
