@@ -85,8 +85,9 @@ trainer = Trainer(model=model, args=training_args, tokenizer=tokenizer)
 
 trainer.train()
 model.save_pretrained("./fine-tuned")
-This will save the fine-tuned model into ./fine-tuned directory.
 ```
+
+This will save the fine-tuned model into `./fine-tuned` directory.
 
 ## 2: Upload the Model to OCI Object Storage
 
