@@ -69,7 +69,9 @@ For more information, see the following resources:
 - [Kubernetes GPU scheduling](https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/)
 - [NVIDIA GPU instances on OCI](https://www.oracle.com/cloud/compute/gpu/)
 
-## 1: Fine-Tuning the Model Locally
+## Getting started
+
+### Fine-Tuning the Model Locally
 
 Firstly, install the required libraries like transformers and torch. You may need to set up a Python environment beforehand. Then, write a script to fine-tune the model using the provided dataset.
 
@@ -89,11 +91,11 @@ model.save_pretrained("./fine-tuned")
 
 This will save the fine-tuned model into `./fine-tuned` directory.
 
-## 2: Upload the Model to OCI Object Storage
+### Upload the Model to OCI Object Storage
 
 Create a bucket in OCI Object Storage and upload the fine-tuned folder there. Note down the URL for future reference.
 
-## 3. Create & Access OKE Cluster
+### Create & Access OKE Cluster
 
 To create an OKE Cluster, we can perform this step through the OCI Console:
 
@@ -127,7 +129,7 @@ After the cluster has been provisioned, to get access into the OKE cluster, foll
 
     When all nodes are `Ready`, your OKE installation has finished successfully.
 
-## 4. Prepare the Custom Image
+### Prepare the Custom Image
 
 Build a Dockerfile containing all dependencies needed for serving the model.This includes installing necessary packages, copying over the saved model and setting up the entrypoint script. Here's an example Dockerfile:
 
@@ -155,7 +157,7 @@ Finally, build the Docker image and push it to the OCI Registry:
 - `docker tag <tenant>/<repo>:latest <region>.ocir.io/<tenant>/<repo>:latest`
 - `docker push <region>.ocir.io/<tenant>/<repo>:latest`
 
-## 5. Deployment
+### Deployment
 
 Now we need to create a Kubernetes deployment file. An example YAML file could look something like this:
 
@@ -209,7 +211,7 @@ Apply the deployment:
 kubectl apply -f deployment.yml
 ```
 
-## 6: Expose the Service
+### Expose the Service
 
 Expose the deployed service through a LoadBalancer:
 
@@ -250,7 +252,7 @@ curl <external IP address>:8080/generate_stream \
     -H 'Content-Type: application/json'
 ```
 
-## 2. Text Generation Inference (TGI) & Hardware Specs
+## Text Generation Inference (TGI) & Hardware Specs
 
 To install TGI on the OKE cluster, run the following command:
 
@@ -281,7 +283,7 @@ We've also pulled a Python script [here](./scripts/python_inference.py) if you'd
 ##
 https://cloudmarketplace.oracle.com/marketplace/en_US/listing/165104541
 
-## 3. Model loading
+## Model loading
 
 TGI supports loading models from HuggingFace model hub or locally. To retrieve a custom LLM from the OCI Object Storage service, we created a Python script using the OCI Python software developer SDK, packaged it as a container, and stored the Docker image on the OCI Container Registry. This `model-downloader` container runs before the initialization of TGI containers. It retrieves the model files from Object Storage and stores them on the `emptyDir` volumes, enabling sharing with TGI containers within the same pod.
 
