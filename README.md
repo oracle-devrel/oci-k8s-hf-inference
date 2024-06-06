@@ -10,7 +10,7 @@ In this demo, we demonstrate how to deploy fine-tuned LLM inference containers o
 
 We will use Text Generation Inference (TGI) as the inference framework to expose the Large Language Models.
 
-Check out the demo [here](TODO LINK)
+Check out the demo [here](https://www.youtube.com/watch?v=WQqlB19Dffg&t=1s)
 
 ### HuggingFace text generation inference
 
@@ -219,22 +219,24 @@ Expose the deployed service through a LoadBalancer:
 apiVersion: v1
 kind: Service
 metadata:
-  name: tgi
+  name: tgi-service
+  namespace: default  # Change this if your application is in a different namespace
+  labels:
+    app: tgi-app
 spec:
-  ports:
-  - port: 80
-    targetPort: 8080
-    protocol: TCP
-    name: http
-  selector:
-    app: tgi
   type: LoadBalancer
+  selector:
+    app: tgi-app  # This should match the labels of your deployment or pods
+  ports:
+    - protocol: TCP
+      port: 80  # External port
+      targetPort: 8080  # Port on which your application is running inside the pods
 ```
 
 Apply the service:
 
 ```bash
-kubectl apply -f service.yml
+kubectl apply -f load-balancer.yaml
 ```
 
 Get the external IP address assigned to the Load Balancer:
