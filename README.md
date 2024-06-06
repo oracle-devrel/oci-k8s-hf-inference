@@ -244,7 +244,7 @@ kubectl get svc
 Use this IP address along with /generate endpoint to send requests to the model.
 
 ```bash
-curl '<external IP address>':8080/generate_stream \
+curl <external IP address>:8080/generate_stream \
     -X POST \
     -d '{"inputs":"What is Deep Learning?","parameters":{"max_new_tokens":50}}' \
     -H 'Content-Type: application/json'
