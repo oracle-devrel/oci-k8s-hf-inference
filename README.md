@@ -69,7 +69,30 @@ For more information, see the following resources:
 - [Kubernetes GPU scheduling](https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/)
 - [NVIDIA GPU instances on OCI](https://www.oracle.com/cloud/compute/gpu/)
 
-## 1. Create & Access OKE Cluster
+## 1: Fine-Tuning the Model Locally
+
+Firstly, install the required libraries like transformers and torch. You may need to set up a Python environment beforehand. Then, write a script to fine-tune the model using the provided dataset.
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
+import torch
+
+model = AutoModelForCausalLM.from_pretrained("EleutherAI/meta-llama2-13B")
+tokenizer = AutoTokenizer.from_pretrained("EleutherAI/meta-llama2-13B")
+
+training_args = TrainingArguments(output_dir="./fine-tuned", num_train_epochs=5)
+trainer = Trainer(model=model, args=training_args, tokenizer=tokenizer)
+
+trainer.train()
+model.save_pretrained("./fine-tuned")
+This will save the fine-tuned model into ./fine-tuned directory.
+```
+
+## 2: Upload the Model to OCI Object Storage
+
+Create a bucket in OCI Object Storage and upload the fine-tuned folder there. Note down the URL for future reference.
+
+## 3. Create & Access OKE Cluster
 
 To create an OKE Cluster, we can perform this step through the OCI Console:
 
@@ -103,6 +126,129 @@ After the cluster has been provisioned, to get access into the OKE cluster, foll
 
     When all nodes are `Ready`, your OKE installation has finished successfully.
 
+## 4. Prepare the Custom Image
+
+Build a Dockerfile containing all dependencies needed for serving the model.This includes installing necessary packages, copying over the saved model and setting up the entrypoint script. Here's an example Dockerfile:
+
+```docker
+FROM python:3.8-slim
+RUN pip install --no-cache-dir torch transformers flask gunicorn gevent
+COPY ./fine-tuned /app/fine-tuned
+WORKDIR /app
+EXPOSE 8080
+ENTRYPOINT ["sh","entrypoint.sh"]
+```
+
+In the same directory, prepare an entrypoint script (entrypoint.sh) which sets up the Flask server:
+
+```bash
+#!/bin/bash
+export MODEL_PATH="/app/fine-tuned/"
+exec gunicorn --bind 0.0.0.0:$PORT --workers $NUM_WORKERS app:server
+```
+
+Finally, build the Docker image and push it to the OCI Registry:
+￼
+- `docker login <region>.ocir.io`
+- `docker build . -t <tenant>/<repo>:latest`
+- `docker tag <tenant>/<repo>:latest <region>.ocir.io/<tenant>/<repo>:latest`
+- `docker push <region>.ocir.io/<tenant>/<repo>:latest`
+
+## 5. Deployment
+
+Now we need to create a Kubernetes deployment file. An example YAML file could look something like this:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: tgi
+  name: tgi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tgi
+  template:
+    metadata:
+      annotations:
+        nvidia.com/gpus: "1"
+      creationTimestamp: null
+      labels:
+        app: tgi
+    spec:
+      containers:
+      - env:
+        - name: MODEL_URL
+          value: https://objectstorage.<region>.oraclecloud.com/n/<namespace>/b/<bucket>/o/path/to/your/saved/model
+        image: <tenant>/<repo>:latest
+        name: tgi
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        resources:
+          limits:
+            nvidia.com/gpu: "1"
+      initContainers:
+      - name: model-downloader
+        image: oraclelinux:7-slim
+        command: ['curl', '-fsSL', '${MODEL_URL}']
+        volumeMounts:
+        - mountPath: "/app/fine-tuned"
+          name: model-volume
+      volumes:
+      - emptyDir: {}
+        name: model-volume
+```
+
+Apply the deployment:
+
+```bash
+kubectl apply -f deployment.yml
+```
+
+## 6: Expose the Service
+
+Expose the deployed service through a LoadBalancer:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: tgi
+spec:
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: tgi
+  type: LoadBalancer
+```
+
+Apply the service:
+
+```bash
+kubectl apply -f service.yml
+```
+
+Get the external IP address assigned to the Load Balancer:
+
+```bash
+kubectl get svc
+```
+
+Use this IP address along with /generate endpoint to send requests to the model.
+
+```bash
+curl '<external IP address>':8080/generate_stream \
+    -X POST \
+    -d '{"inputs":"What is Deep Learning?","parameters":{"max_new_tokens":50}}' \
+    -H 'Content-Type: application/json'
+```
+
 ## 2. Text Generation Inference (TGI) & Hardware Specs
 
 To install TGI on the OKE cluster, run the following command:
@@ -131,47 +277,8 @@ curl 127.0.0.1:8080/generate_stream \
 
 We've also pulled a Python script [here](./scripts/python_inference.py) if you'd rather make the requests programatically using Python.
 
-## 2. Environment Setup
-
-We need to set up NVIDIA CUDA and NVCC (Nvidia CUDA Compiler) to run parallel code on GPUs. For that, let's run the following commands.
-
-1. Configure the repository:
-
-    ```bash
-    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey |sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
-    && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list \
-    && sudo apt-get update
-    ```
-
-2. Install the NVIDIA Container Toolkit packages:
-
-    ```bash
-    sudo apt-get install -y nvidia-container-toolkit
-    ```
-
-3. Configure the container runtime by using the nvidia-ctk command:
-
-    ```bash
-    sudo nvidia-ctk runtime configure --runtime=docker
-    ```
-
-4. Restart the Docker daemon:
-
-    ```bash
-    sudo systemctl restart docker
-    ```
-
-5. Check that `CUDA` and `nvcc` are installed by running the following commands:
-
-    ```bash
-    nvcc -V
-    nvidia-smi
-    ```
-
-> It's recommended to install NVIDIA drivers with  `CUDA 12.2` or higher.
-
-For running the Docker container on a machine with no GPUs or CUDA support, it is enough to remove the `--gpus all` flag and add `--disable-custom-kernels`, please note CPU is not the intended platform for this project, so performance might be subpar.
-
+##
+https://cloudmarketplace.oracle.com/marketplace/en_US/listing/165104541
 
 ## 3. Model loading
 
