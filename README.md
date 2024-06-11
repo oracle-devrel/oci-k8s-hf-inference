@@ -28,28 +28,6 @@ The following image depicts the real memory utilization after the inference cont
 
 ![gpu spec](./img/gpu_specs.avif)
 
-### Deploying the LLM container on OKE
-
-These are the instructions we will perform in this demo:
-
-![deploying LLM container on OKE](./img/llm_container_oke.avif)
-
-0. (Optional) Take one of the pretrained LLMs from HuggingFace model hub, such as `Meta Llama2 13B`, and fine-tune it with a targeted dataset on an [OCI NVIDIA GPU Compute instance](https://www.oracle.com/cloud/compute/gpu/#choice?source=:so:ch:or:awr::::). You can refer [to this AI solution](https://github.com/oracle-devrel/oci-genai-finetuning) to learn how to do finetuning if you're particularly interested in this step.
-
-1. Save the customized LLM locally and upload it to OCI Object Storage, to store it as a model repository.
-
-2. Deploy an OKE cluster and create a node pool consisting of `VM.GPU.A10.1` compute instances, powered by NVIDIA A10 Tensor Core GPUs (or any other Compute instance you want). OKE offers worker node images with **preinstalled NVIDIA GPU drivers**.
-
-3. Install NVIDIA device plugin for Kubernetes, a DaemonSet that allows you to run GPU enabled containers in the Kubernetes cluster.
-
-4. Build a Docker image for the `model-downloader` container to pull model files from Object Storage service. (The previous session provides more details.)
-
-5. Create a Kubernetes deployment to roll out the TGI containers and `model-downloader` container. To schedule the TGI container on GPU, specify the resources limit using `“nvidia.com/gpu.”` Run `model-downloader` as Init Container to ensure that TGI container only starts after the successful completion of model downloads.
-
-6. Create a Kubernetes service of type `Loadbalancer`. OKE will automatically spawn an OCI load balancer to expose the TGI application API to the Internet, allowing us to consume it wherever we want in our AI applications.
-
-7. To interact with the model, you can use `curl` to send a request to `<Load Balancer IP address>:<port>/generate`, or deploy an inference client, such as Gradio, to observe your custom LLM in action. We also prepared [this Python script](./scripts/python_inference.py) to run requests against the model with Python.
-
 ## 0. Prerequisites & Docs
 
 ### Prerequisites
@@ -282,12 +260,32 @@ curl 127.0.0.1:8080/generate_stream \
 
 We've also pulled a Python script [here](./scripts/python_inference.py) if you'd rather make the requests programatically using Python.
 
-##
-https://cloudmarketplace.oracle.com/marketplace/en_US/listing/165104541
 
 ## Model loading
 
 TGI supports loading models from HuggingFace model hub or locally. To retrieve a custom LLM from the OCI Object Storage service, we created a Python script using the OCI Python software developer SDK, packaged it as a container, and stored the Docker image on the OCI Container Registry. This `model-downloader` container runs before the initialization of TGI containers. It retrieves the model files from Object Storage and stores them on the `emptyDir` volumes, enabling sharing with TGI containers within the same pod.
+
+### Deploying the LLM container on OKE
+
+These are the instructions we will perform in this demo:
+
+![deploying LLM container on OKE](./img/llm_container_oke.avif)
+
+0. (Optional) Take one of the pretrained LLMs from HuggingFace model hub, such as `Meta Llama2 13B`, and fine-tune it with a targeted dataset on an [OCI NVIDIA GPU Compute instance](https://www.oracle.com/cloud/compute/gpu/#choice?source=:so:ch:or:awr::::). You can refer [to this AI solution](https://github.com/oracle-devrel/oci-genai-finetuning) to learn how to do finetuning if you're particularly interested in this step.
+
+1. Save the customized LLM locally and upload it to OCI Object Storage, to store it as a model repository.
+
+2. Deploy an OKE cluster and create a node pool consisting of `VM.GPU.A10.1` compute instances, powered by NVIDIA A10 Tensor Core GPUs (or any other Compute instance you want). OKE offers worker node images with **preinstalled NVIDIA GPU drivers**.
+
+3. Install NVIDIA device plugin for Kubernetes, a DaemonSet that allows you to run GPU enabled containers in the Kubernetes cluster.
+
+4. Build a Docker image for the `model-downloader` container to pull model files from Object Storage service. (The previous session provides more details.)
+
+5. Create a Kubernetes deployment to roll out the TGI containers and `model-downloader` container. To schedule the TGI container on GPU, specify the resources limit using `“nvidia.com/gpu.”` Run `model-downloader` as Init Container to ensure that TGI container only starts after the successful completion of model downloads.
+
+6. Create a Kubernetes service of type `Loadbalancer`. OKE will automatically spawn an OCI load balancer to expose the TGI application API to the Internet, allowing us to consume it wherever we want in our AI applications.
+
+7. To interact with the model, you can use `curl` to send a request to `<Load Balancer IP address>:<port>/generate`, or deploy an inference client, such as Gradio, to observe your custom LLM in action. We also prepared [this Python script](./scripts/python_inference.py) to run requests against the model with Python.
 
 ## Conclusion
 
