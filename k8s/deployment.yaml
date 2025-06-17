@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tgi
+  labels:
+    app: tgi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tgi
+  template:
+    metadata:
+      labels:
+        app: tgi
+    spec:
+      tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+      nodeSelector:
+        nvidia.com/gpu: "true"
+      dnsConfig:
+        nameservers:
+        - 8.8.8.8
+        - 8.8.4.4
+      volumes:
+      - name: model-cache-volume
+        persistentVolumeClaim:
+          claimName: tgi-model-cache-pvc
+      - name: hf-secret-volume
+        secret:
+          secretName: hf-secret
+      - name: shm-volume
+        persistentVolumeClaim:
+          claimName: tgi-shm-pvc
+      containers:
+      - name: tgi
+        image: ghcr.io/huggingface/text-generation-inference:latest
+        env:
+        - name: MODEL_ID
+          value: ""
+        - name: HUGGING_FACE_HUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-secret
+              key: HF_TOKEN
+        - name: NUM_SHARD
+          value: "2"
+        - name: PORT
+          value: "80" 
+        - name: QUANTIZE
+          value: "eetq"
+        ports:
+        - containerPort: 80
+          protocol: TCP
+        volumeMounts:
+        - name: model-cache-volume
+          mountPath: /data
+        - name: shm-volume
+          mountPath: /dev/shm
+        resources:
+          limits:
+            nvidia.com/gpu: "2"
+            ephemeral-storage: "100Gi"
+            cpu: "30"
+            memory: "480Gi"            
+          requests:
+            nvidia.com/gpu: "2"
+            cpu: "8"
+            memory: "64Gi"
+            ephemeral-storage: "50Gi"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 12
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 240
+          periodSeconds: 20
+          timeoutSeconds: 10
+          failureThreshold: 6

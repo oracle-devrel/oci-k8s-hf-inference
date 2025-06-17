@@ -1,14 +1,10 @@
-# Deploying LLMs using HuggingFace and Kubernetes on OCI Container Engine for Kubernetes (OKE)
+# Deploying LLMs using HuggingFace and Kubernetes on OCI Kubernetes Engine (OKE)
 
 [![License: UPL](https://img.shields.io/badge/license-UPL-green)](https://img.shields.io/badge/license-UPL-green)<!--[![Quality gate](https://sonarcloud.io/api/project_badges/quality_gate?project=oracle-devrel_oci-k8s-hf-inference)](https://sonarcloud.io/dashboard?id=oracle-devrel_oci-k8s-hf-inference)-->
 
 ## Introduction
 
-Large language models (LLMs) have made significant strides in text generation, problem-solving, and following instructions. As businesses integrate LLMs to develop cutting-edge solutions, the need for scalable, secure, and efficient deployment platforms becomes increasingly imperative. Kubernetes has risen as the preferred option for its scalability, flexibility, portability, and resilience.
-
-In this demo, we demonstrate how to deploy fine-tuned LLM inference containers on Oracle Container Engine for Kubernetes (OKE), an OCI-managed Kubernetes service that simplifies deployments and operations at scale for enterprises. This service enables them to retain the custom model and datasets within their own tenancy without relying on a third-party inference API.
-
-We will use Text Generation Inference (TGI) as the inference framework to expose the Large Language Models.
+This guide provides step-by-step instructions on deploying Text Generation Inference (TGI) on Oracle Kubernetes Engine (OKE). TGI is an open-source toolkit for serving popular large language models (LLMs).
 
 Check out the demo [here](https://www.youtube.com/watch?v=WQqlB19Dffg&t=1s)
 
@@ -33,7 +29,8 @@ The following image depicts the real memory utilization after the inference cont
 ### Prerequisites
 
 - An OCI tenancy with available credits to spend, and access to NVIDIA A10 Tensor Core GPU(s).
-- A registered and verified HuggingFace account with a valid Access Token
+- A registered and verified HuggingFace account with a valid Access Token.
+- An OKE cluster with a node pool consisting of VM.GPU.A10.1 compute instances.
 
 ### Docs
 
@@ -42,254 +39,143 @@ For more information, see the following resources:
 - [HuggingFace text generation inference](http://https://github.com/huggingface/text-generation-inference)
 - [NVIDIA device plugin for Kubernetes](https://github.com/NVIDIA/k8s-device-plugin#deployment-via-helm)
 - [HuggingFace model hub](https://huggingface.co/models)
-- [OCI Container Engine for Kubernetes (OKE)](https://www.oracle.com/cloud/cloud-native/container-engine-kubernetes/)
+- [OCI Kubernetes Engine (OKE)](https://www.oracle.com/cloud/cloud-native/container-engine-kubernetes/)
 - [OCI Container Registry](https://docs.oracle.com/en-us/iaas/Content/Registry/Concepts/registryoverview.htm)
 - [Kubernetes GPU scheduling](https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/)
 - [NVIDIA GPU instances on OCI](https://www.oracle.com/cloud/compute/gpu/)
 
 ## Getting started
 
-### Fine-Tuning the Model Locally
+### Create an OKE Cluster using Terraform
 
-Firstly, install the required libraries like transformers and torch. You may need to set up a Python environment beforehand. Then, write a script to fine-tune the model using the provided dataset.
+First, create an OKE cluster using the provided Terraform configuration file (terraform/main.tf). This will create a VCN, subnets, an OKE cluster, and a node pool with GPU-enabled nodes.
 
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
-import torch
+To use the Terraform configuration, you'll need to provide the required variables:
 
-model = AutoModelForCausalLM.from_pretrained("EleutherAI/meta-llama2-13B")
-tokenizer = AutoTokenizer.from_pretrained("EleutherAI/meta-llama2-13B")
+- compartment_id: The ID of the compartment where you want to create the OKE cluster.
+- region: The region where you want to create the OKE cluster.
+- cluster_name: The name of the OKE cluster.
+- node_pool_name: The name of the node pool.
+- boot_volume_size_in_gbs: The size of the boot volume for the nodes in GB.
+- image_id: The ID of the image to use for the nodes.
+- kubernetes_version: The version of Kubernetes to use for the OKE cluster.
+  
+You can create a `terraform.tfvars` file to provide these variables.
 
-training_args = TrainingArguments(output_dir="./fine-tuned", num_train_epochs=5)
-trainer = Trainer(model=model, args=training_args, tokenizer=tokenizer)
+  ```terraform
+  compartment_id = ""
+  region        = ""
+  cluster_name  = "cluster"
+  node_pool_name = ""
+  kubernetes_version = "" # Replace with the desired Kubernetes version
+  image_id = "" # Replace with your actual image OCID ie ocid1.image.oc1.iad.aaaaaaaaexample
+  boot_volume_size_in_gbs = "50" # Default boot volume size is 50 in GBs, please adjust as needed
+  ```
 
-trainer.train()
-model.save_pretrained("./fine-tuned")
-```
+Then, initialize the Terraform working directory and apply the configuration:
 
-This will save the fine-tuned model into `./fine-tuned` directory.
+  ```bash
+  terraform init && terraform apply
+  ```
 
-### Upload the Model to OCI Object Storage
+### Generate Kubeconfig for the OKE Cluster
 
-Create a bucket in OCI Object Storage and upload the fine-tuned folder there. Note down the URL for future reference.
-
-### Create & Access OKE Cluster
-
-To create an OKE Cluster, we can perform this step through the OCI Console:
-
-![k8s creation](./img/creation_1.PNG)
-
-![k8s creation](./img/creation_2.PNG)
-
-![k8s creation](./img/creation_3.PNG)
-
-And wait for the creation of the cluster, it'll take around 5 minutes.
-
-> You will be able to access this cluster however you want. It's recommended to use OCI Cloud Shell to access and connect to the cluster, as all OCI configuration is performed automatically. If you still want to use a Compute Instance or your own local machine, you will need to set up authentication to your OCI tenancy. Also, you must have downloaded and installed `OCI CLI version 2.24.0` (or later) and configured it for use. If your version of the OCI CLI is earlier than version `2.24.0`, download and install a newer version from here.
-
-After the cluster has been provisioned, to get access into the OKE cluster, follow these steps.
-
-1. Click Access Cluster on the `Cluster details` page:
-
-    ![cluster1](img/AccessCluster.png)
-
-2. Accept the default Cloud Shell Access and click Copy to copy the `oci ce cluster create-kubeconfig ...` command.
-
-3. To access the cluster, paste the command into your Cloud Shell session and hit Enter.
-
-4. Verify that the `kubectl` is working by using the `get nodes` command:
-
-    ```bash
-    kubectl get nodes
-    ```
-
-5. Repeat this command multiple times until all three nodes show `Ready` in the `STATUS` column:
-
-    When all nodes are `Ready`, your OKE installation has finished successfully.
-
-### Prepare the Custom Image
-
-Build a Dockerfile containing all dependencies needed for serving the model.This includes installing necessary packages, copying over the saved model and setting up the entrypoint script. Here's an example Dockerfile:
-
-```docker
-FROM python:3.8-slim
-RUN pip install --no-cache-dir torch transformers flask gunicorn gevent
-COPY ./fine-tuned /app/fine-tuned
-WORKDIR /app
-EXPOSE 8080
-ENTRYPOINT ["sh","entrypoint.sh"]
-```
-
-In the same directory, prepare an entrypoint script (entrypoint.sh) which sets up the Flask server:
+After creating the OKE cluster, Terraform will output a command to generate a kubeconfig file. You can reuse this command to generate the kubeconfig file:
 
 ```bash
-#!/bin/bash
-export MODEL_PATH="/app/fine-tuned/"
-exec gunicorn --bind 0.0.0.0:$PORT --workers $NUM_WORKERS app:server
+$(terraform output -raw kubeconfig_command)
 ```
 
-Finally, build the Docker image and push it to the OCI Registry:
-￼
-- `docker login <region>.ocir.io`
-- `docker build . -t <tenant>/<repo>:latest`
-- `docker tag <tenant>/<repo>:latest <region>.ocir.io/<tenant>/<repo>:latest`
-- `docker push <region>.ocir.io/<tenant>/<repo>:latest`
+Run this command to generate the kubeconfig file:
 
-### Deployment
+```bash
+oci ce cluster create-kubeconfig --cluster-id <cluster_id> --file $HOME/.kube/config --region <region> --token-version 2.0.0 --overwrite
+```
+
+### Verify Kubeconfig and Access the OKE Cluster
+
+Verify that the kubeconfig file is correctly generated by checking the cluster nodes:
+
+```bash
+kubectl get nodes
+```
+
+The nodes should be in a Ready state. If they're not, you can check the node status and logs to troubleshoot.
+
+Additionally, the terraform/main.tf file includes an init script that runs on node initialization. This script is used to configure the nodes.
+
+### Add Toleration to the CoreDNS Pod
+
+Before deploying TGI, you need to add a toleration to the CoreDNS pod to allow it to run on nodes with the NVIDIA GPU taint. You can do this by patching the CoreDNS deployment:
+
+```bash
+kubectl patch deployment coredns -n kube-system --patch '{"spec": {"template": {"spec": {"tolerations": [{"key": "nvidia.com/gpu", "operator": "Exists", "effect": "NoSchedule"}]}}}}'
+```
+
+## Install NVIDIA Device Plugin
+
+Install the NVIDIA device plugin to enable GPU support in Kubernetes:
+
+```bash
+# Apply the NVIDIA device plugin
+kubectl create -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.14.0/nvidia-device-plugin.yml
+```
+
+Verify that the GPU is available in the cluster:
+
+```bash
+kubectl get nodes "-o=custom-columns=NAME:.metadata.name,GPU:.status.allocatable.nvidia\.com/gpu"
+```
+
+### Create a Kubernetes Secret for the Hugging Face Token
+
+Create a Kubernetes Secret to store your Hugging Face token. You can do this using the following command:
+
+```bash
+kubectl create secret generic hf-secret --from-literal=HF_TOKEN=your_hugging_face_token
+```
+
+### Create Persistent Volume Claims (PVCs)
+
+Create PVCs for the TGI model cache and shared memory using the provided k8s/pvc.yaml file:
+
+```bash
+kubectl apply -f k8s/pvc.yaml
+```
+
+### Deploy TGI using Kubernetes
+
+Deploy TGI using the provided k8s/deployment.yaml file:
+
+```bash
+kubectl apply -f k8s/deployment.yaml
+```
+
+This will create a Deployment for TGI with the specified configuration, including the model ID, number of shards, and quantization method.
+
+### Expose the TGI Service
 
 Now we need to create a Kubernetes deployment file. An example YAML file could look something like this:
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  labels:
-    app: tgi
-  name: tgi
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: tgi
-  template:
-    metadata:
-      annotations:
-        nvidia.com/gpus: "1"
-      creationTimestamp: null
-      labels:
-        app: tgi
-    spec:
-      containers:
-      - env:
-        - name: MODEL_URL
-          value: https://objectstorage.<region>.oraclecloud.com/n/<namespace>/b/<bucket>/o/path/to/your/saved/model
-        image: <tenant>/<repo>:latest
-        name: tgi
-        ports:
-        - containerPort: 8080
-          protocol: TCP
-        resources:
-          limits:
-            nvidia.com/gpu: "1"
-      initContainers:
-      - name: model-downloader
-        image: oraclelinux:7-slim
-        command: ['curl', '-fsSL', '${MODEL_URL}']
-        volumeMounts:
-        - mountPath: "/app/fine-tuned"
-          name: model-volume
-      volumes:
-      - emptyDir: {}
-        name: model-volume
-```
-
-Apply the deployment:
-
 ```bash
-kubectl apply -f deployment.yml
+kubectl apply -f k8s/service.yaml
 ```
 
-### Expose the Service
+This will create a Service of type LoadBalancer, which will expose the TGI service to the outside world.
 
-Expose the deployed service through a LoadBalancer:
+## Test the TGI Service
 
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: tgi-service
-  namespace: default  # Change this if your application is in a different namespace
-  labels:
-    app: tgi-app
-spec:
-  type: LoadBalancer
-  selector:
-    app: tgi-app  # This should match the labels of your deployment or pods
-  ports:
-    - protocol: TCP
-      port: 80  # External port
-      targetPort: 8080  # Port on which your application is running inside the pods
-```
-
-Apply the service:
-
-```bash
-kubectl apply -f load-balancer.yaml
-```
-
-Get the external IP address assigned to the Load Balancer:
+Get the external IP address of the LoadBalancer:
 
 ```bash
 kubectl get svc
 ```
 
-Use this IP address along with /generate endpoint to send requests to the model.
-
-```bash
-curl <external IP address>:8080/generate_stream \
-    -X POST \
-    -d '{"inputs":"What is Deep Learning?","parameters":{"max_new_tokens":50}}' \
-    -H 'Content-Type: application/json'
-```
-
-## Text Generation Inference (TGI) & Hardware Specs
-
-To install TGI on the OKE cluster, run the following command:
-
-```bash
-model=HuggingFaceH4/zephyr-7b-beta # huggingface model's repository (model_creator_name/model_name) (can be any model)
-volume=$PWD/data # share a volume with the Docker container to avoid downloading weights every run
-
-docker run --gpus all --shm-size 1g -p 8080:80 -v $volume:/data ghcr.io/huggingface/text-generation-inference:2.0 --model-id $model
-```
-
-> To see all possible deploy flags and options, you can use the `--help` flag. It’s possible to configure the number of shards, quantization, generation parameters, and more.
-
-This will setup whichever model from HF you want, as long as the repository is well-formed and contains the necessary files.
-
-After the container has been pulled, you can make requests via an API to `/generate_stream` to localhost (from within the container) or to `<Load Balancer IP address>:<port>/generate`:
-
-```bash
-curl 127.0.0.1:8080/generate_stream \
-    -X POST \
-    -d '{"inputs":"What is Deep Learning?","parameters":{"max_new_tokens":50}}' \
-    -H 'Content-Type: application/json'
-```
-
-> [Here](https://huggingface.github.io/text-generation-inference/) is a full API specification for all callable endpoints.
-
-We've also pulled a Python script [here](./scripts/python_inference.py) if you'd rather make the requests programatically using Python.
-
-
-## Model loading
-
-TGI supports loading models from HuggingFace model hub or locally. To retrieve a custom LLM from the OCI Object Storage service, we created a Python script using the OCI Python software developer SDK, packaged it as a container, and stored the Docker image on the OCI Container Registry. This `model-downloader` container runs before the initialization of TGI containers. It retrieves the model files from Object Storage and stores them on the `emptyDir` volumes, enabling sharing with TGI containers within the same pod.
-
-### Deploying the LLM container on OKE
-
-These are the instructions we will perform in this demo:
-
-![deploying LLM container on OKE](./img/llm_container_oke.avif)
-
-0. (Optional) Take one of the pretrained LLMs from HuggingFace model hub, such as `Meta Llama2 13B`, and fine-tune it with a targeted dataset on an [OCI NVIDIA GPU Compute instance](https://www.oracle.com/cloud/compute/gpu/#choice?source=:so:ch:or:awr::::). You can refer [to this AI solution](https://github.com/oracle-devrel/oci-genai-finetuning) to learn how to do finetuning if you're particularly interested in this step.
-
-1. Save the customized LLM locally and upload it to OCI Object Storage, to store it as a model repository.
-
-2. Deploy an OKE cluster and create a node pool consisting of `VM.GPU.A10.1` compute instances, powered by NVIDIA A10 Tensor Core GPUs (or any other Compute instance you want). OKE offers worker node images with **preinstalled NVIDIA GPU drivers**.
-
-3. Install NVIDIA device plugin for Kubernetes, a DaemonSet that allows you to run GPU enabled containers in the Kubernetes cluster.
-
-4. Build a Docker image for the `model-downloader` container to pull model files from Object Storage service. (The previous session provides more details.)
-
-5. Create a Kubernetes deployment to roll out the TGI containers and `model-downloader` container. To schedule the TGI container on GPU, specify the resources limit using `“nvidia.com/gpu.”` Run `model-downloader` as Init Container to ensure that TGI container only starts after the successful completion of model downloads.
-
-6. Create a Kubernetes service of type `Loadbalancer`. OKE will automatically spawn an OCI load balancer to expose the TGI application API to the Internet, allowing us to consume it wherever we want in our AI applications.
-
-7. To interact with the model, you can use `curl` to send a request to `<Load Balancer IP address>:<port>/generate`, or deploy an inference client, such as Gradio, to observe your custom LLM in action. We also prepared [this Python script](./scripts/python_inference.py) to run requests against the model with Python.
+Then, use curl to test the TGI service:
 
 ## Conclusion
 
-Deploying a production-ready LLM becomes straightforward when using the HuggingFace TGI container and OKE. This approach allows you to harness the benefits of Kubernetes without the complexities of deploying and managing a Kubernetes cluster. The customized LLMs are fine-tuned and hosted within your Oracle Cloud Infrastructure tenancy, offering complete control over data privacy and model security.
+Deploying a production-ready LLM becomes straightforward when using the HuggingFace TGI container and OKE. This approach allows you to harness the benefits of Kubernetes without the complexities of deploying and managing a Kubernetes cluster.
 
 ## Contributing
 
